@@ -1,20 +1,17 @@
 {
   "name": "stratoforce-mcp-server",
-  "version": "1.0.0",
-  "description": "StratoForce AI MCP Server — Revenue intelligence for any AI assistant",
-  "main": "index.js",
+  "version": "2.0.0",
   "type": "module",
-  "bin": {
-    "stratoforce-mcp": "./index.js"
-  },
+  "description": "StratoForce AI Revenue Intelligence — MCP Server. The brain behind any sales agent.",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "start:stdio": "node server.js --stdio",
+    "start:http": "node server.js"
   },
-  "keywords": ["mcp", "salesforce", "revenue-intelligence", "stratoforce"],
-  "author": "StratoForce AI",
-  "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1"
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.1.0",
+    "zod": "^3.25.23"
   }
 }
