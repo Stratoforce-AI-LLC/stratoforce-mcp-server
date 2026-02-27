@@ -1,3 +1,4 @@
 node_modules/
-
 .mcpregistry_*
+.git/
+.gitignore

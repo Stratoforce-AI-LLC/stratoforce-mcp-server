@@ -24,12 +24,22 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { execSync } from 'node:child_process';
 import express from 'express';
+import {
+  OAUTH_CONFIG,
+  handleAuthorize,
+  handleCallback,
+  handleToken,
+  handleResourceMetadata,
+  handleServerMetadata,
+  oauthMiddleware,
+} from './oauth.js';
 
 // ── Config ──
 
 const MODE = process.argv.includes('--stdio') ? 'stdio' : 'http';
 const PORT = parseInt(process.env.MCP_PORT || '3100', 10);
 const API_KEY = process.env.STRATOFORCE_API_KEY || null;
+const OAUTH_ENABLED = process.argv.includes('--oauth') || process.env.OAUTH_ENABLED === 'true';
 const DEFAULT_ORG = process.env.SF_TARGET_ORG || 'stratoforce-dev';
 
 // ── Salesforce Auth ──
@@ -1029,16 +1039,32 @@ if (MODE === 'stdio') {
     next();
   });
 
-  app.post('/mcp', apiKeyAuth, handlePost);
-  app.get('/mcp', apiKeyAuth, handleGet);
-  app.delete('/mcp', apiKeyAuth, handleDelete);
+  // OAuth 2.1 routes (when enabled)
+  if (OAUTH_ENABLED) {
+    app.get('/.well-known/oauth-protected-resource', handleResourceMetadata);
+    app.get('/.well-known/oauth-authorization-server', handleServerMetadata);
+    app.get('/oauth/authorize', handleAuthorize);
+    app.get('/oauth/callback', handleCallback);
+    app.post('/oauth/token', express.urlencoded({ extended: false }), handleToken);
+    
+    // MCP routes with OAuth auth
+    app.post('/mcp', oauthMiddleware, handlePost);
+    app.get('/mcp', oauthMiddleware, handleGet);
+    app.delete('/mcp', oauthMiddleware, handleDelete);
+  } else {
+    // MCP routes with API key auth (default)
+    app.post('/mcp', apiKeyAuth, handlePost);
+    app.get('/mcp', apiKeyAuth, handleGet);
+    app.delete('/mcp', apiKeyAuth, handleDelete);
+  }
 
   app.listen(PORT, () => {
     console.log(`\n🔥 StratoForce AI MCP Server v2.0`);
     console.log(`   Mode: HTTP (Streamable HTTP transport)`);
     console.log(`   Port: ${PORT}`);
-    console.log(`   Auth: ${API_KEY ? 'API Key required' : 'Open access'}`);
+    console.log(`   Auth: ${OAUTH_ENABLED ? 'OAuth 2.1 (PKCE)' : API_KEY ? 'API Key required' : 'Open access'}`);
     console.log(`   Tools: 15 | Resources: 4 | Prompts: 4`);
+    if (OAUTH_ENABLED) console.log(`   OAuth: ${OAUTH_CONFIG.issuer}/oauth/authorize`);
     console.log(`   Health: http://localhost:${PORT}/health`);
     console.log(`   MCP:    http://localhost:${PORT}/mcp\n`);
   });
