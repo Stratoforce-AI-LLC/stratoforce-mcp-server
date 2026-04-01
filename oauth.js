@@ -30,7 +30,12 @@ const OAUTH_CONFIG = {
   
   // Our server
   issuer: process.env.OAUTH_ISSUER || 'https://mcp.stratoforce.ai',
-  jwtSecret: process.env.OAUTH_JWT_SECRET || randomBytes(32).toString('hex'),
+  // Y-11 / M-3: Warn if JWT secret not set — random secret invalidates all tokens on restart
+  jwtSecret: (() => {
+    const s = process.env.OAUTH_JWT_SECRET;
+    if (!s) console.warn('WARNING: OAUTH_JWT_SECRET not set — using random secret. All active tokens will be invalidated on restart. Set OAUTH_JWT_SECRET in production.');
+    return s || randomBytes(32).toString('hex');
+  })(),
   tokenExpirySeconds: 3600, // 1 hour
   refreshExpirySeconds: 86400 * 30, // 30 days
   

@@ -42,9 +42,20 @@ const API_KEY = process.env.STRATOFORCE_API_KEY || null;
 const OAUTH_ENABLED = process.argv.includes('--oauth') || process.env.OAUTH_ENABLED === 'true';
 const DEFAULT_ORG = process.env.SF_TARGET_ORG || 'stratoforce-dev';
 
+// Y-11 / H-2: Fail fast if API key not configured and not using OAuth or stdio
+if (MODE !== 'stdio' && !OAUTH_ENABLED && !API_KEY) {
+  console.error('FATAL: STRATOFORCE_API_KEY env var is required when not using OAuth.');
+  console.error('Set it and restart: export STRATOFORCE_API_KEY=<your-key>');
+  process.exit(1);
+}
+
 // ── Salesforce Auth ──
 
 function getSalesforceAuth(targetOrg = DEFAULT_ORG) {
+  // Y-11 / L-5: Guard against shell injection via org alias
+  if (!/^[a-zA-Z0-9_-]+$/.test(targetOrg)) {
+    throw new Error(`Invalid org alias: "${targetOrg}". Only alphanumeric, hyphen, and underscore are allowed.`);
+  }
   try {
     const raw = execSync(
       `sf org display --target-org ${targetOrg} --json 2>/dev/null`,
@@ -569,7 +580,8 @@ function createServer() {
     { days: z.number().optional().describe('Look-back period in days (default 7)') },
     async ({ days }) => {
       try {
-        const d = days || 7;
+        // Y-11 / M-4: Bound days param — prevent unbounded SOQL queries
+        const d = Math.min(Math.max(parseInt(days) || 7, 1), 365);
         const alerts = await sfQuery(`
           SELECT Id, Name, stratoforce__Alert_Type__c, stratoforce__Severity__c,
                  stratoforce__Message__c, stratoforce__Opportunity__r.Name, CreatedDate
@@ -957,7 +969,7 @@ if (MODE === 'stdio') {
 
   // API key middleware (optional — for pre-OAuth deployments)
   const apiKeyAuth = (req, res, next) => {
-    if (!API_KEY) return next(); // No key configured = open access
+    if (!API_KEY) return next(); // Startup check (above) already failed-fast if not OAuth/stdio
     const provided = req.headers['x-api-key'] || req.headers.authorization?.replace('Bearer ', '');
     if (provided !== API_KEY) {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing API key' });
@@ -1031,8 +1043,10 @@ if (MODE === 'stdio') {
   };
 
   // CORS for remote clients
+  // Y-11 / L-3: Use CORS_ORIGIN env var to scope allowed origins in production
+  const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, x-api-key, Authorization');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
